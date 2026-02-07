@@ -1,0 +1,14 @@
+/.venv/
+syntaxwebsite/.venv/
+**/download_cache/
+syntaxwebsite/instance/
+logs/
+*.pyc
+__pycache__/
+.env
+.DS_Store
+*.sqlite3
+*.db
+node_modules/
+/.vscode/
+*.log
