@@ -31,7 +31,18 @@
             <textarea class="form-control rounded" placeholder="Message ( 1024 Chars limit )" name="message" style="min-height:200px" required></textarea>
             <p class="m-0" style="font-size: 12px;">Do not send any personal or sensitive information about yourself! A staff member will never ask for your password or email.</p>
             <div class="d-flex justify-content-end align-items-top mt-2">
-                <div class="cf-turnstile" data-theme="dark" data-sitekey="{{turnstilekey}}"></div>
+                {% if turnstilekey %}
+                    <div class="cf-turnstile" data-theme="dark" data-sitekey="{{turnstilekey}}"></div>
+                {% else %}
+                    <div style="margin-right:1rem;">
+                        {% if captchaQuestion %}
+                            <label class="form-label">Captcha: {{ captchaQuestion }}</label>
+                            <input class="form-control" type="text" name="captcha" placeholder="Answer" required />
+                        {% else %}
+                            <p class="text-muted">Captcha unavailable. Please contact an admin.</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="ms-3">
                     <button type="submit" class="btn btn-primary">Send</button>

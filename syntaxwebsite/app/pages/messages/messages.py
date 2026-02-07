@@ -49,13 +49,35 @@ def new_message(userid):
     else:
         ReplyMessage = None
 
-    return render_template("messages/new.html", targetuser=TargetUser, replymessage=ReplyMessage)
+    # generate arithmetic captcha fallback for local/dev if Turnstile not configured
+    try:
+        import random
+        a = random.randint(1, 9)
+        b = random.randint(1, 9)
+        session_key = f"messages_captcha_answer:{userid}"
+        session[session_key] = str(a + b)
+        captcha_question = f"{a} + {b} = ?"
+    except Exception:
+        captcha_question = None
+
+    return render_template("messages/new.html", targetuser=TargetUser, replymessage=ReplyMessage, captchaQuestion=captcha_question)
 
 @MessageRoute.route("/new/<userid>", methods=["POST"])
 @auth.authenticated_required
 @limiter.limit("10/minute")
 def send_message(userid):
-    if 'cf-turnstile-response' not in request.form or request.form.get('cf-turnstile-response') == '':
+    # Accept either Cloudflare Turnstile or the server-side arithmetic captcha
+    cf_token = request.form.get('cf-turnstile-response', default=None, type=str)
+    captcha_response = request.form.get('captcha', default=None, type=str)
+    session_key = f"messages_captcha_answer:{userid}"
+    expected = session.get(session_key)
+    # consume stored captcha to prevent replay
+    try:
+        session.pop(session_key, None)
+    except Exception:
+        pass
+
+    if not cf_token and (expected is None or captcha_response is None or captcha_response.strip() == ""):
         flash("Please complete the captcha", "error")
         return redirect(f"/messages/new/{userid}")
     if 'message' not in request.form or request.form.get('message') == '':
@@ -84,9 +106,18 @@ def send_message(userid):
         flash("Your subject is too long", "error")
         return redirect(f"/messages/new/{TargetUser.id}")
     
-    if not turnstile.VerifyToken(request.form.get('cf-turnstile-response')):
-        flash("Invalid captcha", "error")
-        return redirect(f"/messages/new/{TargetUser.id}")
+    if cf_token:
+        if not turnstile.VerifyToken(cf_token):
+            flash("Invalid captcha", "error")
+            return redirect(f"/messages/new/{TargetUser.id}")
+    else:
+        try:
+            if str(int(captcha_response.strip())) != str(int(expected)):
+                flash("Invalid captcha", "error")
+                return redirect(f"/messages/new/{TargetUser.id}")
+        except Exception:
+            flash("Invalid captcha", "error")
+            return redirect(f"/messages/new/{TargetUser.id}")
     if redis_controller.get(f"message:{TargetUser.id}:{AuthenticatedUser.id}") is not None:
         flash("You are sending messages too quickly", "error")
         return redirect(f"/messages/new/{TargetUser.id}")
